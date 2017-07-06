@@ -8,7 +8,7 @@ RUN yum -y install openssl
 # Generate SSL certs into "/tmp/crypto_gen/ssl"
 RUN mkdir -p /tmp/crypto_gen/ssl
 ADD  ./files/ssl_gen/openssl.cnf /tmp/crypto_gen/ssl/
-ADD  ./files/ssl_gen/ssl_cert.sh /tmp/crypto_gen/ssl/
+ADD  ./files/ssl_gen/ssl_certs.sh /tmp/crypto_gen/ssl/
 RUN  backcd=`pwd` \
   && cd /tmp/crypto_gen/ssl \
   && chmod +x ssl_certs.sh \
