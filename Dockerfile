@@ -11,6 +11,7 @@ ADD  ./files/ssl_gen/openssl.cnf /tmp/crypto_gen/ssl
 ADD  ./files/ssl_gen/ssl_cert.sh /tmp/crypto_gen/ssl
 RUN  backcd=`pwd` \
   && cd /tmp/crypto_gen/ssl \
+  && chmod +x ssl_certs.sh \
   && ./ssl_certs.sh clean \
   && ./ssl_certs.sh generate \
   && cd $backcd
