@@ -1,54 +1,78 @@
 FROM centos:centos6
 
-MAINTAINER Hiroaki Sano <hiroaki.sano.9stories@gmail.com>
+MAINTAINER Lukassos <lukassos@gmail.com>
 
-# Basic packages
-RUN rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-8.noarch.rpm \
-  && yum -y install passwd sudo git wget openssl openssh openssh-server openssh-clients
+# openssl - should be installed though
+RUN yum -y install openssl
 
-# Create user
-RUN useradd hiroakis \
- && echo "hiroakis" | passwd hiroakis --stdin \
- && sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config \
- && sed -ri 's/#UsePAM no/UsePAM no/g' /etc/ssh/sshd_config \
- && echo "hiroakis ALL=(ALL) ALL" >> /etc/sudoers.d/hiroakis
+# Generate SSL certs into "/tmp/crypto_gen/ssl"
+RUN mkdir -p /tmp/crypto_gen/ssl
+ADD  ./files/ssl_gen/openssl.cnf /tmp/crypto_gen/ssl \
+  && ./files/ssl_gen/ssl_cert.sh /tmp/crypto_gen/ssl
+RUN  backcd=`pwd` \
+  && cd /tmp/crypto_gen/ssl
+  && ./ssl_certs.sh clean \
+  && ./ssl_certs.sh generate \
+  && cd $backcd
 
-# Redis
-RUN yum install -y redis
 
-# RabbitMQ
+# RabbitMQ - dependancy on erlang
+ADD ./files/repos/rabbitmq-erlang.repo /etc/yum.repos.d
+# this gets trickier
+# 1. there are bunch of dependencies needed from epel before installing RabbitMQ
+# 2. there is an older erlang inside epel
+# 3. for installing RabbitMQ with yum from rpm file we need wget
+# so there`s exact procedure to do this
 RUN yum install -y erlang \
+  && rpm -Uvh http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm \
+  && yum -y install wget \
   && rpm --import http://www.rabbitmq.com/rabbitmq-signing-key-public.asc \
-  && rpm -Uvh http://www.rabbitmq.com/releases/rabbitmq-server/v3.1.4/rabbitmq-server-3.1.4-1.noarch.rpm \
-  && git clone git://github.com/joemiller/joemiller.me-intro-to-sensu.git \
-  && cd joemiller.me-intro-to-sensu/; ./ssl_certs.sh clean && ./ssl_certs.sh generate \
-  && mkdir /etc/rabbitmq/ssl \
-  && cp /joemiller.me-intro-to-sensu/server_cert.pem /etc/rabbitmq/ssl/cert.pem \
-  && cp /joemiller.me-intro-to-sensu/server_key.pem /etc/rabbitmq/ssl/key.pem \
-  && cp /joemiller.me-intro-to-sensu/testca/cacert.pem /etc/rabbitmq/ssl/
-ADD ./files/rabbitmq.config /etc/rabbitmq/
+  && wget https://github.com/rabbitmq/rabbitmq-server/releases/download/rabbitmq_v3_6_10/rabbitmq-server-3.6.10-1.el6.noarch.rpm /tmp/rabbitmq-server-3.6.10-1.el6.noarch.rpm \
+  && yum install -y /tmp/rabbitmq-server-3.6.10-1.el6.noarch.rpm \
+  && mkdir -p /etc/rabbitmq/ssl \
+  && cp /tmp/crypto_gen/ssl/server_cert.pem /etc/rabbitmq/ssl/cert.pem \
+  && cp /tmp/crypto_gen/ssl/server_key.pem /etc/rabbitmq/ssl/key.pem \
+  && cp /tmp/crypto_gen/ssl/testca/cacert.pem /etc/rabbitmq/ssl/
+ADD ./files/configs/rabbitmq.config /etc/rabbitmq/
 RUN rabbitmq-plugins enable rabbitmq_management
+EXPOSE 5671 # RabitMQ Message Broker
+EXPOSE 15672 # RabitMQ Management
 
-# Sensu server
-ADD ./files/sensu.repo /etc/yum.repos.d/
+
+# Redis - epel repo needed
+RUN yum install -y redis
+EXPOSE 6379 # Redis
+
+
+# Sensu server, client and api - sensu repo needed
+ADD ./files/repos/sensu.repo /etc/yum.repos.d
 RUN yum install -y sensu
-ADD ./files/config.json /etc/sensu/
+ADD ./files/configs/config.json /etc/sensu/
 RUN mkdir -p /etc/sensu/ssl \
-  && cp /joemiller.me-intro-to-sensu/client_cert.pem /etc/sensu/ssl/cert.pem \
-  && cp /joemiller.me-intro-to-sensu/client_key.pem /etc/sensu/ssl/key.pem
+  && cp /tmp/crypto_gen/ssl/client_cert.pem /etc/sensu/ssl/cert.pem \
+  && cp /tmp/crypto_gen/ssl/client_key.pem /etc/sensu/ssl/key.pem
+EXPOSE 4567 # Sensu API
 
-# uchiwa
+
+# Uchiwa - sensu repo needed
 RUN yum install -y uchiwa
-ADD ./files/uchiwa.json /etc/sensu/
+ADD ./files/configs/uchiwa.json /etc/sensu/
+EXPOSE 3000 # Uchiwa web front end
 
-# supervisord
-RUN wget http://peak.telecommunity.com/dist/ez_setup.py;python ez_setup.py \
-  && easy_install supervisor
-ADD files/supervisord.conf /etc/supervisord.conf
 
-RUN /etc/init.d/sshd start && /etc/init.d/sshd stop
+# Omit SSH just now : left for future maybe
+## Create user "usnes" for remote access
+#RUN yum -y install passwd sudo
+#RUN useradd usnes \
+# && echo "usnes" | passwd usnes --stdin \
+# && sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config \
+# && sed -ri 's/#UsePAM no/UsePAM no/g' /etc/ssh/sshd_config \
+# && echo "usnes ALL=(ALL) ALL" >> /etc/sudoers.d/usnes
+#
+## SSH
+#RUN yum -y install openssh openssh-server openssh-clients
+#RUN /etc/init.d/sshd start && /etc/init.d/sshd stop
+#EXPOSE 22 # SSH
 
-EXPOSE 22 3000 4567 5671 15672
-
-CMD ["/usr/bin/supervisord"]
-
+COPY ./docker-entrypoint.sh /
+ENTRYPOINT ["/docker-entrypoint.sh"]
