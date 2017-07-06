@@ -7,8 +7,8 @@ RUN yum -y install openssl
 
 # Generate SSL certs into "/tmp/crypto_gen/ssl"
 RUN mkdir -p /tmp/crypto_gen/ssl
-ADD  ./files/ssl_gen/openssl.cnf /tmp/crypto_gen/ssl \
-  && ./files/ssl_gen/ssl_cert.sh /tmp/crypto_gen/ssl
+ADD  ./files/ssl_gen/openssl.cnf /tmp/crypto_gen/ssl
+ADD  ./files/ssl_gen/ssl_cert.sh /tmp/crypto_gen/ssl
 RUN  backcd=`pwd` \
   && cd /tmp/crypto_gen/ssl
   && ./ssl_certs.sh clean \
@@ -59,20 +59,6 @@ RUN yum install -y uchiwa
 ADD ./files/configs/uchiwa.json /etc/sensu/
 EXPOSE 3000 # Uchiwa web front end
 
-
-# Omit SSH just now : left for future maybe
-## Create user "usnes" for remote access
-#RUN yum -y install passwd sudo
-#RUN useradd usnes \
-# && echo "usnes" | passwd usnes --stdin \
-# && sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config \
-# && sed -ri 's/#UsePAM no/UsePAM no/g' /etc/ssh/sshd_config \
-# && echo "usnes ALL=(ALL) ALL" >> /etc/sudoers.d/usnes
-#
-## SSH
-#RUN yum -y install openssh openssh-server openssh-clients
-#RUN /etc/init.d/sshd start && /etc/init.d/sshd stop
-#EXPOSE 22 # SSH
 
 COPY ./docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
