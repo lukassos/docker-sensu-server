@@ -66,6 +66,11 @@ ADD ./files/configs/uchiwa.json /etc/sensu/
 # Uchiwa web front end
 EXPOSE 3000
 
+# supervisord
+RUN yum install -y supervisor \
+  && rm -rf /etc/supervisord.conf
+ADD ./files/configs/supervisord.conf  /etc/supervisord.conf
+RUN chmod +rw /etc/supervisord.conf
 
 COPY ./docker-entrypoint.sh /
 RUN chmod +x docker-entrypoint.sh
